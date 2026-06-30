@@ -51,6 +51,12 @@ export default class PuzzleSystem {
       const spriteKey = this.getSpriteKey(inter);
 
       if (inter.type === 'item') {
+        // Already collected (persisted in inventory) — don't recreate it.
+        if (this.inventory.includes(inter.key)) {
+          inter.collected = true;
+          continue;
+        }
+
         const itemY = inter.y ?? floorY;
 
         if (spriteKey) {
@@ -114,6 +120,9 @@ export default class PuzzleSystem {
   getInteractableNear(playerX, range = 80) {
     return this.interactables.find((inter) => {
       if (inter.collected) return false;
+      // fuse_box is a non-interactive config marker (holds correctSequence) —
+      // never let it intercept an E-press meant for a nearby switch.
+      if (inter.type === 'fuse_box') return false;
       if (inter.type === 'investigate' && inter.examined) return false;
       if (inter.requiresItem && !this.inventory.includes(inter.requiresItem)) return false;
       if (inter.key === 'examine_photo' && !this.inventory.includes('old_photo')) return false;
@@ -247,53 +256,45 @@ export default class PuzzleSystem {
   }
 
   handleFuseSwitch(obj) {
-    // CAT TRUST MECHANIC: Cat hisses near wrong switches in the sequence
-    // If cat is hissing near this switch, it means it's the WRONG one to press next
+    // Once power is restored, the switches are inert.
+    if (this.puzzleStates.fuse_box) return;
+
+    // CAT TRUST MECHANIC: the cat hisses near the wrong next switch.
     const catSystem = this.scene.catSystem;
     if (catSystem && catSystem.isWarning()) {
-      const catX = catSystem.sprite?.x;
-      const switchDist = Math.abs((catX || 0) - obj.x);
-      if (switchDist < 100) {
-        // Cat is blocking this switch — it's the wrong one!
+      const catX = catSystem.sprite?.x ?? 0;
+      if (Math.abs(catX - obj.x) < 100) {
         this.scene.showMessage('The cat hisses at this switch...', 2000);
-        // Still allow the flip (player can ignore), but it'll be wrong
       }
     }
 
     const correct = this.fuseConfig.correctSequence;
     this.fuseSequence.push(obj.key);
-
     const idx = this.fuseSequence.length - 1;
-    if (obj.key === correct[idx]) {
-      if (this.scene.missionSystem) {
-        const stepMap = { switch_a: 'switch_a', switch_b: 'switch_b', switch_c: 'switch_c' };
-        if (stepMap[obj.key]) {
-          this.scene.missionSystem.completeStep(stepMap[obj.key]);
-        }
+
+    // Mark the matching mission step only when pressed in the correct position.
+    if (obj.key === correct[idx] && this.scene.missionSystem) {
+      this.scene.missionSystem.completeStep(obj.key);
+    }
+
+    // Wait until a full sequence has been entered before judging it.
+    if (this.fuseSequence.length < correct.length) return;
+
+    const solved = this.fuseSequence.every((k, i) => k === correct[i]);
+    if (solved) {
+      this.puzzleStates.fuse_box = true;
+      this.scene.showMessage('The fuse box clicks into place.', 2000);
+      this.scene.events.emit('puzzleSolved', 'fuse_box');
+      this.scene.onFuseBoxSolved();
+    } else {
+      this.fuseSequence = [];
+      this.scene.showMessage('Wrong order. The fuse resets.', 2000);
+      // Punish ignoring the cat with a flicker scare
+      if (this.scene.horrorEventSystem) {
+        this.scene.horrorEventSystem.flickerLights(1500);
       }
-    }
-
-    if (this.fuseSequence.length > correct.length) {
-      this.fuseSequence = [obj.key];
-    }
-
-    if (this.fuseSequence.length === correct.length) {
-      const solved = this.fuseSequence.every((k, i) => k === correct[i]);
-      if (solved) {
-        this.puzzleStates.fuse_box = true;
-        this.scene.showMessage('The fuse box clicks into place.', 2000);
-        this.scene.events.emit('puzzleSolved', 'fuse_box');
-        this.scene.onFuseBoxSolved();
-      } else {
-        this.fuseSequence = [];
-        this.scene.showMessage('Wrong order. The fuse resets.', 2000);
-        // Punish ignoring the cat with a flicker scare
-        if (this.scene.horrorEventSystem) {
-          this.scene.horrorEventSystem.flickerLights(1500);
-        }
-        if (this.scene.missionSystem) {
-          this.scene.missionSystem.resetSteps();
-        }
+      if (this.scene.missionSystem) {
+        this.scene.missionSystem.resetSteps();
       }
     }
   }

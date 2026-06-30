@@ -22,6 +22,7 @@ export default class GameScene extends Phaser.Scene {
     this.catWarningTimer = null;
     this.catWarningElapsed = 0;
     this.catWarningActive = false;
+    this.catMeterCompleted = false;
     this.petCooldown = 0;
     this.cameraWobbleTime = 0;
   }
@@ -38,6 +39,9 @@ export default class GameScene extends Phaser.Scene {
     this.savedFlashlightIsOn = data?.flashlightIsOn ?? null;
     this.savedSanity = data?.sanity ?? null;
     this.loadedFromSave = data?.loadedFromSave ?? false;
+    this.savedFiredTriggers = data?.firedTriggers ?? null;
+    // Cat hissing gate resets each time the room is (re)entered.
+    this.catMeterCompleted = false;
   }
 
   create() {
@@ -93,8 +97,9 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.puzzleSystem.create(this);
-    this.puzzleSystem.loadRoom(roomId, roomData.interactables);
 
+    // Restore persisted inventory / puzzle state BEFORE building the room, so
+    // already-collected items are not recreated (otherwise they reappear).
     if (this.savedInventory) {
       this.puzzleSystem.inventory = [...this.savedInventory];
     }
@@ -104,6 +109,8 @@ export default class GameScene extends Phaser.Scene {
         this.fuseBoxSolved = true;
       }
     }
+
+    this.puzzleSystem.loadRoom(roomId, roomData.interactables);
 
     this.dialogueSystem.create(this, this.playerSystem);
 
@@ -118,12 +125,22 @@ export default class GameScene extends Phaser.Scene {
     );
     this.horrorEventSystem.loadRoomEvents(roomId, HORROR_EVENTS[roomId]);
 
+    // Restore which once-only triggers (e.g. Mang Berto's dialogue) already
+    // fired, so they don't replay/glitch when the player re-enters the room.
+    if (this.savedFiredTriggers) {
+      this.horrorEventSystem.firedTriggers = new Set(this.savedFiredTriggers);
+    }
+
     this.catSystem.setState(roomData.catInitialState);
     if (roomData.catRunTargetX) {
       this.catSystem.runTo(roomData.catRunTargetX);
     }
 
     this.roomLightOn = roomData.roomLightDefault ?? false;
+    // Kitchen light stays on once the fuse box is solved (persists on return).
+    if (roomId === 'kitchen' && this.fuseBoxSolved) {
+      this.roomLightOn = true;
+    }
     this.lightSystem.setRoomLight(this.roomLightOn);
 
     this.sanityBar = this.add.graphics();
@@ -482,6 +499,7 @@ export default class GameScene extends Phaser.Scene {
           // 10 seconds passed — player is safe now
           this.catWarningActive = false;
           this.catWarningElapsed = 0;
+          this.catMeterCompleted = true;
           this.catSystem.setState('walking');
           this.showMessage('The danger has passed. You\'re safe to move.', 3000);
           // Mark the nearest trigger as fired so it doesn't re-trigger
@@ -832,6 +850,16 @@ export default class GameScene extends Phaser.Scene {
 
   transitionToRoom(roomId, playerStartX = null) {
     if (this.isTransitioning || !roomId) return;
+
+    // CAT HISSING GATE (kitchen): block leaving while the cat is hissing and the
+    // safety meter hasn't completed yet.
+    if (this.currentRoomId === 'kitchen'
+      && this.catSystem && this.catSystem.isWarning()
+      && !this.catMeterCompleted) {
+      this.showMessage('The cat is hissing — wait for it to settle before leaving!', 1500);
+      return;
+    }
+
     this.isTransitioning = true;
 
     // Auto-save before transitioning
@@ -859,6 +887,7 @@ export default class GameScene extends Phaser.Scene {
         battery: this.lightSystem.battery,
         flashlightIsOn: this.lightSystem.isOn,
         sanity: this.playerSystem.sanity,
+        firedTriggers: [...this.horrorEventSystem.firedTriggers],
       });
     });
   }
