@@ -17,8 +17,8 @@ export const ROOMS = {
         spriteKey: 'door_closed',
         requiresItem: null,
         leadsTo: null,
-        doorWidth: 154,
-        doorHeight: 308,
+        doorWidth: 180,
+        doorHeight: 360,
         range: 130,
       },
       {
@@ -38,8 +38,8 @@ export const ROOMS = {
         spriteKey: 'door_closed',
         requiresItem: 'house_key',
         leadsTo: 'hallway',
-        doorWidth: 154,
-        doorHeight: 308,
+        doorWidth: 180,
+        doorHeight: 360,
         range: 130,
       },
       {
@@ -87,8 +87,8 @@ export const ROOMS = {
         spriteKey: 'door_closed',
         requiresItem: 'kitchen_key',
         leadsTo: 'kitchen',
-        doorWidth: 115,
-        doorHeight: 225,
+        doorWidth: 180,
+        doorHeight: 360,
         range: 130,
       },
       {
@@ -99,8 +99,8 @@ export const ROOMS = {
         spriteKey: 'door_closed',
         requiresItem: null,
         leadsTo: 'living_room',
-        doorWidth: 115,
-        doorHeight: 225,
+        doorWidth: 180,
+        doorHeight: 360,
         range: 130,
       },
       {

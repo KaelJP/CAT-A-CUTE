@@ -6,28 +6,22 @@ export default class GameOverScene extends Phaser.Scene {
   }
 
   create() {
-    this.add.rectangle(600, 300, 1200, 600, 0x000000);
+    // Full-size dead scene background (ghost_stage3 + player_death composite)
+    const bg = this.add.image(600, 300, 'dead_scene');
+    bg.setDisplaySize(1200, 600);
 
-    const ghost = this.add.image(600, 300, 'jumpscare');
-    ghost.setDisplaySize(800, 600);
-    ghost.setAlpha(0.3);
-
-    this.add.text(600, 250, 'YOU WERE NOT ALONE', {
-      fontFamily: 'Georgia, serif',
-      fontSize: '48px',
-      color: '#8B0000',
-      stroke: '#4a0000',
-      strokeThickness: 3,
-      shadow: { offsetX: 2, offsetY: 4, color: '#3d0000', blur: 6, fill: true },
-    }).setOrigin(0.5);
+    // Pre-rendered blood-drip title image (Metal Mania font + custom drips, transparent PNG)
+    this.add.image(600, 265, 'title_dead').setDisplaySize(900, 130);
 
     // Check if a save exists
     const saveData = GameScene.loadGame();
 
-    const restartText = this.add.text(600, 380, 'Press R to Restart', {
+    const restartText = this.add.text(600, 360, 'Press R to Restart', {
       fontFamily: 'monospace',
       fontSize: '18px',
       color: '#ffffff',
+      backgroundColor: '#00000066',
+      padding: { x: 8, y: 4 },
     }).setOrigin(0.5);
 
     this.tweens.add({
@@ -39,10 +33,12 @@ export default class GameOverScene extends Phaser.Scene {
     });
 
     if (saveData) {
-      const continueText = this.add.text(600, 430, 'Press C to Continue from Save', {
+      const continueText = this.add.text(600, 410, 'Press C to Continue from Save', {
         fontFamily: 'monospace',
         fontSize: '18px',
         color: '#88ff88',
+        backgroundColor: '#00000066',
+        padding: { x: 8, y: 4 },
       }).setOrigin(0.5);
 
       this.tweens.add({

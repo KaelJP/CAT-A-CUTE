@@ -29,6 +29,8 @@ export default class BootScene extends Phaser.Scene {
     loadImage('ghost_stage2', 'assets/images/ghost/ghost_stage2.png');
     loadImage('ghost_stage3', 'assets/images/ghost/ghost_stage3.png');
     loadImage('jumpscare', 'assets/images/jumpscare/jumpscare.png');
+    loadImage('dead_scene', 'assets/images/outro/dead_scene.png');
+    loadImage('title_dead', 'assets/images/outro/title_dead.png');
 
     loadImage('berto_talking', 'assets/images/mang berto/berto_talking.png');
     loadImage('berto_worried', 'assets/images/mang berto/berto_worried.png');
