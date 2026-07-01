@@ -131,9 +131,18 @@ export default class CatSystem {
     const dist = targetX - this.sprite.x;
 
     if (this.state === 'walking' || this.state === 'idle' || this.state === 'calm') {
+      // Prevent cat from getting stuck inside wall bounds (left/right doorways are at 80/1120)
+      targetX = Math.max(90, Math.min(1110, targetX));
+      
+      const dist = targetX - this.sprite.x;
+
       if (Math.abs(dist) > 15) {
+        let speed = this.followSpeed;
+        if (Math.abs(dist) > 150) {
+          speed *= 2.5; // Recover quickly if separated
+        }
         const dir = dist > 0 ? 1 : -1;
-        this.sprite.x += dir * this.followSpeed * (delta / 1000);
+        this.sprite.x += dir * speed * (delta / 1000);
         if (this.state !== 'walking' && this.state !== 'calm') this.setState('walking');
       } else if (this.state !== 'idle' && this.state !== 'calm') {
         this.setState('idle');

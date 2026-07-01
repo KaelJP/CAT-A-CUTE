@@ -89,7 +89,9 @@ export default class GameScene extends Phaser.Scene {
     this.playerSystem.sprite.body.allowGravity = false;
 
     this.catSystem = new CatSystem();
-    this.catSystem.create(this, roomData.catStartX, roomData.floorY);
+    // Spawn the cat near the player dynamically (e.g. 80px away), rather than using hardcoded catStartX
+    const initialCatX = startX > 600 ? startX - 80 : startX + 80;
+    this.catSystem.create(this, initialCatX, roomData.floorY);
 
     this.lightSystem.create(this);
     if (this.savedBattery !== null) {
@@ -677,13 +679,11 @@ export default class GameScene extends Phaser.Scene {
     // BEDROOM: Cat defends at closet area
     if (roomOverride === 'defending' && this.currentRoomId === 'bedroom') {
       const nearest = this.horrorEventSystem.getNearestUnfiredTrigger(playerX);
-      if (nearest) {
-        this.catSystem.setGhostX(nearest.trigger.event?.x ?? nearest.trigger.x + 100);
-        const currentState = this.catSystem.getState();
-        const defThresh = currentState === 'defending' ? 230 : 200;
-        if (nearest.distance < defThresh) {
-          this.catSystem.setState('defending');
-        }
+      if (nearest && nearest.distance < 300) {
+        this.catSystem.setGhostX(nearest.trigger.event?.x ?? nearest.trigger.x);
+        this.catSystem.setState('defending');
+      } else if (this.catSystem.getState() !== 'walking') {
+        this.catSystem.setState('walking');
       }
       return;
     }
@@ -1010,8 +1010,8 @@ export default class GameScene extends Phaser.Scene {
     if (this.currentRoomId === 'kitchen'
       && this.catSystem && this.catSystem.isWarning()
       && !this.catMeterCompleted) {
-      this.showMessage('The cat is hissing — wait for it to settle before leaving!', 1500);
-      return;
+      this.showMessage('The cat is hissing, but you push through the door anyway...', 1500);
+      // Removed the 'return;' statement to prevent hard-blocking the player
     }
 
     this.isTransitioning = true;
