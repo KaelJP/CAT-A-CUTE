@@ -12,6 +12,6 @@ class NoCacheHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == '__main__':
     socketserver.TCPServer.allow_reuse_address = True
-    with socketserver.TCPServer(("", PORT), NoCacheHTTPRequestHandler) as httpd:
+    with socketserver.TCPServer(("127.0.0.1", PORT), NoCacheHTTPRequestHandler) as httpd:
         print(f"Serving at port {PORT} with caching disabled")
         httpd.serve_forever()

@@ -20,6 +20,7 @@ export const ROOMS = {
         doorWidth: 180,
         doorHeight: 360,
         range: 130,
+        isEscapeDoor: true,
       },
       {
         key: 'house_key',

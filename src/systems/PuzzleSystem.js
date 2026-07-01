@@ -220,6 +220,29 @@ export default class PuzzleSystem {
         break;
 
       case 'door':
+        // ESCAPE DOOR: front door in living room — requires key + active escape
+        if (obj.isEscapeDoor) {
+          if (!this.scene.escapeSequenceActive) {
+            this.scene.showMessage('It won\'t budge...', 2000);
+            return;
+          }
+          if (!this.inventory.includes('truth_note_obj')) {
+            this.scene.showMessage('The door is locked. You need something to prove the way out.', 2000);
+            return;
+          }
+          // Player has the key AND escape is active → open + win transition
+          if (this.scene.sounds?.door_creak) {
+            this.scene.sounds.door_creak.play({ volume: 0.7 });
+          }
+          if (obj.sprite) {
+            obj.sprite.setTexture('door_open');
+          }
+          this.scene.time.delayedCall(600, () => {
+            this.scene.transitionToRoom('living_room_dawn', 200);
+          });
+          return;
+        }
+
         if (obj.requiresItem && !this.inventory.includes(obj.requiresItem)) {
           this.scene.showMessage('The door is locked. You need a key.', 2000);
           return;

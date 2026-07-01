@@ -217,16 +217,13 @@ export default class GameScene extends Phaser.Scene {
     this.escapeGhost = null;
     this.escapeGhostDelay = 2000;
     this.escapeTimer = null;
-    this.escapeTimeRemaining = 90; // 90 seconds to escape
+    this.escapeTimeRemaining = 60; // 60 seconds to escape
     this.escapeTimerText = null;
 
     if (this.escapeSequenceActive) {
-      // If player reached living_room during escape → redirect to living_room_dawn
-      if (roomId === 'living_room') {
-        this.time.delayedCall(500, () => {
-          this.transitionToRoom('living_room_dawn', 200);
-        });
-      } else if (!roomData.isFinalRoom) {
+      // Living room: do NOT auto-win. The player must interact with the front door
+      // while holding the basement key (truth_note_obj). Ghost still chases here.
+      if (!roomData.isFinalRoom) {
         // Spawn ghost pursuer after a delay
         this.time.delayedCall(this.escapeGhostDelay, () => {
           if (!this.scene.isActive() || this.isTransitioning) return;
@@ -246,7 +243,7 @@ export default class GameScene extends Phaser.Scene {
         // Timer ticks every second
         this.escapeTimer = this.time.addEvent({
           delay: 1000,
-          repeat: 89,
+          repeat: 59,
           callback: () => {
             this.escapeTimeRemaining--;
             if (this.escapeTimeRemaining <= 0) {
@@ -897,15 +894,38 @@ export default class GameScene extends Phaser.Scene {
   spawnEscapeGhost() {
     if (this.escapeGhost) return;
 
-    // Ghost spawns at the far edge behind the player
-    const px = this.playerSystem.sprite.x;
-    const spawnX = px > 600 ? 50 : 1150;
+    // GHOST SPAWN POSITION:
+    // In the basement: ghost emerges from the RIGHT wall (far end of room).
+    // In other rooms: ghost emerges from the door the player just entered through
+    // (savedStartX tells us where they entered — ghost spawns at that door position).
+    const GHOST_WALL_SPAWN_X = 1180; // right-wall edge in basement
+    let spawnX;
 
+    if (this.currentRoomId === 'basement') {
+      spawnX = GHOST_WALL_SPAWN_X;
+    } else {
+      // Player entered from savedStartX; the ghost emerges from that same door
+      const playerEntryX = this.playerSystem.sprite.x < 600 ? 80 : 1120;
+      spawnX = playerEntryX;
+    }
+
+    // Start fully transparent and slide out from the wall
     this.escapeGhost = this.add.image(spawnX, this.roomFloorY - 80, 'ghost_stage2');
     this.escapeGhost.setDisplaySize(100, 200);
     this.escapeGhost.setOrigin(0.5, 1.0);
     this.escapeGhost.setDepth(85);
-    this.escapeGhost.setAlpha(0.7);
+    this.escapeGhost.setAlpha(0);
+
+    // Emerge animation: fade in + slide away from the wall toward the room center
+    const slideDistance = 60;
+    const slideTarget = spawnX < 600 ? spawnX + slideDistance : spawnX - slideDistance;
+    this.tweens.add({
+      targets: this.escapeGhost,
+      x: slideTarget,
+      alpha: 0.7,
+      duration: 1200,
+      ease: 'Cubic.easeOut',
+    });
 
     // Ghost whisper sound
     if (this.sounds?.ghost_whisper) {
@@ -920,8 +940,8 @@ export default class GameScene extends Phaser.Scene {
     const ghostX = this.escapeGhost.x;
     const dist = px - ghostX;
 
-    // Ghost moves toward player at 80px/s (player is 160px/s — tolerable, gives player time)
-    const ghostSpeed = 80;
+    // Ghost moves toward player at 110px/s
+    const ghostSpeed = 110;
     const dir = dist > 0 ? 1 : -1;
     this.escapeGhost.x += dir * ghostSpeed * (delta / 1000);
     this.escapeGhost.flipX = dir < 0;
@@ -966,12 +986,35 @@ export default class GameScene extends Phaser.Scene {
 
   static loadGame() {
     try {
-      const data = localStorage.getItem('catacute_save');
-      if (data) return JSON.parse(data);
+      const raw = localStorage.getItem('catacute_save');
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+
+      // Validate save data schema — reject malformed or polluted saves
+      if (typeof data !== 'object' || data === null || Array.isArray(data)) return null;
+      if (typeof data.roomId !== 'string') return null;
+      if (!Array.isArray(data.inventory)) return null;
+      if (typeof data.puzzleStates !== 'object' || data.puzzleStates === null) return null;
+
+      // Strip any prototype pollution keys from puzzleStates
+      const allowedPuzzleKeys = ['fuse_box'];
+      const cleanPuzzleStates = {};
+      for (const key of allowedPuzzleKeys) {
+        if (Object.prototype.hasOwnProperty.call(data.puzzleStates, key)) {
+          cleanPuzzleStates[key] = !!data.puzzleStates[key];
+        }
+      }
+      data.puzzleStates = cleanPuzzleStates;
+
+      // Ensure numeric fields are actually numbers
+      if (typeof data.sanity === 'number') data.sanity = Math.max(0, Math.min(100, data.sanity));
+      if (typeof data.battery === 'number') data.battery = Math.max(0, Math.min(100, data.battery));
+
+      return data;
     } catch (e) {
-      // ignore
+      // Corrupted save — discard
+      return null;
     }
-    return null;
   }
 
   static clearSave() {
