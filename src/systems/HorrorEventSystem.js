@@ -161,6 +161,10 @@ export default class HorrorEventSystem {
       case 'forceOff':
         this.lightSystem.forceOff();
         break;
+      case 'turnOff':
+        // Turn off flashlight without zeroing battery — player can toggle it back on
+        this.lightSystem.isOn = false;
+        break;
       default:
         break;
     }

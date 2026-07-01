@@ -34,7 +34,7 @@ export const HORROR_EVENTS = {
   },
   basement: {
     triggers: [
-      { id: 'base_dark', x: 200, width: 400, once: true, event: { type: 'forceOff' } },
+      { id: 'base_dark', x: 200, width: 400, once: true, event: { type: 'turnOff' } },
       { id: 'base_ghost2', x: 700, width: 60, once: true, event: { type: 'flash_ghost', stage: 2, x: 900, y: 250, duration: 1200 } },
       { id: 'base_reveal', x: 900, width: 60, once: true, event: { type: 'sound', key: 'reveal_stinger' } },
     ],

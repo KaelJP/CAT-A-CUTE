@@ -80,6 +80,36 @@ export default class PuzzleSystem {
         });
         inter.glowGraphic = glow;
         this.glowGraphics.push(glow);
+      } else if (inter.type === 'battery') {
+        // Already collected — don't recreate
+        if (this.inventory.includes(inter.key)) {
+          inter.collected = true;
+          continue;
+        }
+
+        const itemY = inter.y ?? floorY;
+
+        if (spriteKey) {
+          const spr = this.scene.add.image(inter.x, itemY, spriteKey);
+          spr.setOrigin(0.5, 1.0);
+          spr.setDisplaySize(36, 36);
+          spr.setDepth(6);
+          inter.sprite = spr;
+        }
+
+        const glow = this.scene.add.graphics();
+        glow.fillStyle(0x88ff88, 0.7);
+        glow.fillCircle(inter.x, itemY - 10, 10);
+        glow.setDepth(5);
+        this.scene.tweens.add({
+          targets: glow,
+          alpha: 0.2,
+          duration: 600,
+          yoyo: true,
+          repeat: -1,
+        });
+        inter.glowGraphic = glow;
+        this.glowGraphics.push(glow);
       } else if (inter.type === 'investigate') {
         const highlight = this.scene.add.graphics();
         highlight.fillStyle(0x88aaff, 0.35);
@@ -179,12 +209,23 @@ export default class PuzzleSystem {
         }
         if (obj.key === 'truth_note_obj' && this.scene.missionSystem) {
           this.scene.missionSystem.completeStep('find_note');
+          // TRIGGER ESCAPE SEQUENCE
+          this.scene.escapeSequenceActive = true;
+          this.scene.time.delayedCall(2000, () => {
+            if (this.scene.showMessage) {
+              this.scene.showMessage('You need to get out. NOW.', 3000);
+            }
+          });
         }
         break;
 
       case 'door':
         if (obj.requiresItem && !this.inventory.includes(obj.requiresItem)) {
           this.scene.showMessage('The door is locked. You need a key.', 2000);
+          return;
+        }
+        if (obj.requiresPuzzle && !this.puzzleStates[obj.requiresPuzzle]) {
+          this.scene.showMessage('Something is blocking the way...', 2000);
           return;
         }
         if (!obj.leadsTo) {
@@ -198,6 +239,9 @@ export default class PuzzleSystem {
         if (obj.key === 'hallway_exit_door' && this.scene.missionSystem) {
           this.scene.missionSystem.completeStep('open_kitchen');
         }
+        if (obj.leadsTo === 'living_room_dawn' && this.scene.missionSystem) {
+          this.scene.missionSystem.completeStep('reach_exit');
+        }
 
         if (this.scene.sounds?.door_creak) {
           this.scene.sounds.door_creak.play({ volume: 0.7 });
@@ -206,7 +250,7 @@ export default class PuzzleSystem {
           obj.sprite.setTexture('door_open');
         }
         this.scene.time.delayedCall(600, () => {
-          const entryX = obj.x >= 600 ? 120 : 100;
+          const entryX = obj.x >= 600 ? 120 : 1100;
           this.scene.transitionToRoom(obj.leadsTo, entryX);
         });
         break;
@@ -248,6 +292,23 @@ export default class PuzzleSystem {
         if (obj.missionStep && this.scene.missionSystem) {
           this.scene.missionSystem.completeStep(obj.missionStep);
         }
+        break;
+
+      case 'battery':
+        if (this.inventory.includes(obj.key)) return;
+        this.inventory.push(obj.key);
+        obj.collected = true;
+        if (obj.glowGraphic) {
+          obj.glowGraphic.destroy();
+          obj.glowGraphic = null;
+        }
+        // Recharge flashlight
+        if (this.scene.lightSystem) {
+          const LightSystem = this.scene.lightSystem.constructor;
+          this.scene.lightSystem.recharge(LightSystem.BATTERY_RECHARGE_AMOUNT);
+        }
+        this.scene.showMessage('Picked up battery. Flashlight recharged!', 2500);
+        this.interactables = this.interactables.filter((i) => i.key !== obj.key);
         break;
 
       default:

@@ -22,4 +22,13 @@ export const DIALOGUE = {
     { speaker: 'player', text: 'The cat tried to warn me all along...' },
     { speaker: 'cat', portrait: 'cat_calm', text: '*The cat sits beside you as morning light fills the room. It purrs softly.*' },
   ],
+  dawn_escape: [
+    { speaker: 'player', text: "A black cat crossing your path means bad luck. That's what they say." },
+    { speaker: 'player', text: "But the hissing wasn't anger. It was 'don't go there.'" },
+    { speaker: 'player', text: "The blocking wasn't defiance. It was 'I won't let them reach you.'" },
+    { speaker: 'player', text: 'She crossed my path to stand between me and something worse.' },
+    { speaker: 'cat', portrait: 'cat_calm', text: '*The cat sits in the morning light, watching the last shadows retreat. It blinks slowly at you.*' },
+    { speaker: 'player', text: 'Mang Berto was wrong. They were all wrong.' },
+    { speaker: 'player', text: '...Thank you.' },
+  ],
 };

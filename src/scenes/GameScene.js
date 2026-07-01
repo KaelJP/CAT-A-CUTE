@@ -40,6 +40,9 @@ export default class GameScene extends Phaser.Scene {
     this.savedSanity = data?.sanity ?? null;
     this.loadedFromSave = data?.loadedFromSave ?? false;
     this.savedFiredTriggers = data?.firedTriggers ?? null;
+    this.escapeSequenceActive = data?.escapeSequenceActive ?? false;
+    this.roomLightStates = data?.roomLightStates ?? {};
+    this.savedCompletedMissions = data?.completedMissions ?? [];
     // Cat hissing gate resets each time the room is (re)entered.
     this.catMeterCompleted = false;
   }
@@ -136,7 +139,12 @@ export default class GameScene extends Phaser.Scene {
       this.catSystem.runTo(roomData.catRunTargetX);
     }
 
-    this.roomLightOn = roomData.roomLightDefault ?? false;
+    // Room light: check persisted state first, then default
+    if (this.roomLightStates[roomId] !== undefined) {
+      this.roomLightOn = this.roomLightStates[roomId];
+    } else {
+      this.roomLightOn = roomData.roomLightDefault ?? false;
+    }
     // Kitchen light stays on once the fuse box is solved (persists on return).
     if (roomId === 'kitchen' && this.fuseBoxSolved) {
       this.roomLightOn = true;
@@ -157,11 +165,18 @@ export default class GameScene extends Phaser.Scene {
 
     const missionConfig = MISSIONS[roomId];
     if (missionConfig) {
-      const mission = { ...missionConfig };
-      if (roomId === 'kitchen') {
-        mission.onComplete = () => this.onFuseBoxSolved();
+      // Restore completed missions from previous rooms
+      if (this.savedCompletedMissions.length > 0) {
+        this.missionSystem.completedMissions = [...this.savedCompletedMissions];
       }
-      this.missionSystem.setMission(mission);
+      // Skip re-displaying a mission that's already completed
+      if (!this.missionSystem.isMissionComplete(missionConfig.id)) {
+        const mission = { ...missionConfig };
+        if (roomId === 'kitchen') {
+          mission.onComplete = () => this.onFuseBoxSolved();
+        }
+        this.missionSystem.setMission(mission);
+      }
     }
 
     this.cameras.main.startFollow(this.playerSystem.sprite, true, 0.08, 0.08);
@@ -171,8 +186,8 @@ export default class GameScene extends Phaser.Scene {
     this.eKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.spaceKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    if (roomData.forcedarknessOnEnter) {
-      this.lightSystem.forceOff();
+    if (roomData.forcedarknessOnEnter && !this.loadedFromSave) {
+      // Force room to be dark (no room light) but do NOT drain player's flashlight battery
       this.roomLightOn = false;
       this.lightSystem.setRoomLight(false);
     }
@@ -195,6 +210,81 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.playAmbient(roomData.ambientTrack);
+
+    // === ESCAPE SEQUENCE: Ghost pursuer + living_room redirect + timer ===
+    this.escapeGhost = null;
+    this.escapeGhostDelay = 2000;
+    this.escapeTimer = null;
+    this.escapeTimeRemaining = 90; // 90 seconds to escape
+    this.escapeTimerText = null;
+
+    if (this.escapeSequenceActive) {
+      // If player reached living_room during escape → redirect to living_room_dawn
+      if (roomId === 'living_room') {
+        this.time.delayedCall(500, () => {
+          this.transitionToRoom('living_room_dawn', 200);
+        });
+      } else if (!roomData.isFinalRoom) {
+        // Spawn ghost pursuer after a delay
+        this.time.delayedCall(this.escapeGhostDelay, () => {
+          if (!this.scene.isActive() || this.isTransitioning) return;
+          this.spawnEscapeGhost();
+        });
+
+        // Start escape countdown timer UI
+        this.escapeTimerText = this.add.text(600, 16, '', {
+          fontSize: '18px',
+          color: '#ff4444',
+          fontFamily: 'monospace',
+          fontStyle: 'bold',
+          backgroundColor: '#000000aa',
+          padding: { x: 12, y: 6 },
+        }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(500);
+
+        // Timer ticks every second
+        this.escapeTimer = this.time.addEvent({
+          delay: 1000,
+          repeat: 89,
+          callback: () => {
+            this.escapeTimeRemaining--;
+            if (this.escapeTimeRemaining <= 0) {
+              // Time's up → jumpscare → game over
+              this.horrorEventSystem.jumpscare(3);
+            }
+          },
+        });
+      }
+
+      // Cat leads in living_room_dawn — must be near player at win trigger
+      if (roomData.isFinalRoom) {
+        // Cat leads to center of the room (near player's likely position)
+        this.catSystem.leadTo(400);
+
+        // Wait for cat to arrive near player before triggering dialogue
+        const checkCatArrived = this.time.addEvent({
+          delay: 200,
+          repeat: -1,
+          callback: () => {
+            if (!this.scene.isActive()) { checkCatArrived.remove(); return; }
+            const catX = this.catSystem.sprite?.x ?? 0;
+            const px = this.playerSystem.sprite?.x ?? 200;
+            // Cat must be within 100px of player
+            if (Math.abs(catX - px) < 100) {
+              checkCatArrived.remove();
+              this.catSystem.state = 'calm';
+              this.dialogueSystem.show('dawn_escape', () => {
+                this.time.delayedCall(2000, () => {
+                  if (this.scene.isActive()) {
+                    this.scene.start('WinScene');
+                  }
+                });
+              });
+            }
+          },
+        });
+      }
+    }
+
     this.cameras.main.fadeIn(500);
 
     // Pause button (top-left, always visible)
@@ -301,6 +391,7 @@ export default class GameScene extends Phaser.Scene {
     }
 
     this.roomLightOn = !this.roomLightOn;
+    this.roomLightStates[this.currentRoomId] = this.roomLightOn; // Persist per-room
     this.lightSystem.setRoomLight(this.roomLightOn);
     if (this.missionSystem) {
       this.missionSystem.updateUI();
@@ -439,6 +530,19 @@ export default class GameScene extends Phaser.Scene {
     // === FEATURE #6: Camera effects ===
     this.updateCameraEffects(delta);
 
+    // === ESCAPE SEQUENCE: Ghost pursuer ===
+    this.updateEscapeGhost(delta);
+
+    // === ESCAPE SEQUENCE: Timer display ===
+    if (this.escapeTimerText && this.escapeSequenceActive) {
+      const mins = Math.floor(this.escapeTimeRemaining / 60);
+      const secs = this.escapeTimeRemaining % 60;
+      this.escapeTimerText.setText(`⏱ ${mins}:${secs.toString().padStart(2, '0')}`);
+      if (this.escapeTimeRemaining <= 15) {
+        this.escapeTimerText.setColor('#ff0000');
+      }
+    }
+
     if (Phaser.Input.Keyboard.JustDown(this.spaceKey)) {
       this.lightSystem.toggle();
     }
@@ -450,7 +554,8 @@ export default class GameScene extends Phaser.Scene {
       }
     }
 
-    this.checkRoomEdgeExit(px);
+    // Edge-based exits removed — all room transitions happen through doors only
+    // this.checkRoomEdgeExit(px);
   }
 
   checkRoomEdgeExit(playerX) {
@@ -481,6 +586,9 @@ export default class GameScene extends Phaser.Scene {
   updateCatWarning(playerX) {
     if (this.catSystem.isStateOverride()) return;
     if (this.catSystem.getState() === 'running') return;
+    if (this.catSystem.getState() === 'leading') return;
+    // During escape, cat guides — no warnings
+    if (this.escapeSequenceActive) return;
 
     const roomOverride = this.roomData.catInitialState;
     if (roomOverride === 'calm') return;
@@ -782,11 +890,54 @@ export default class GameScene extends Phaser.Scene {
   // === FEATURE #6: Camera effects ===
   updateCameraEffects(delta) {
     const sanityPct = this.playerSystem.sanity / 100;
-
-    // (Camera wobble removed)
-
-    // (Camera zoom removed)
     this.cameras.main.setZoom(1.0);
+  }
+
+  // === ESCAPE SEQUENCE: Ghost pursuer ===
+  spawnEscapeGhost() {
+    if (this.escapeGhost) return;
+
+    // Ghost spawns at the far edge behind the player
+    const px = this.playerSystem.sprite.x;
+    const spawnX = px > 600 ? 50 : 1150;
+
+    this.escapeGhost = this.add.image(spawnX, this.roomFloorY - 80, 'ghost_stage2');
+    this.escapeGhost.setDisplaySize(100, 200);
+    this.escapeGhost.setOrigin(0.5, 1.0);
+    this.escapeGhost.setDepth(85);
+    this.escapeGhost.setAlpha(0.7);
+
+    // Ghost whisper sound
+    if (this.sounds?.ghost_whisper) {
+      this.sounds.ghost_whisper.play({ volume: 0.5 });
+    }
+  }
+
+  updateEscapeGhost(delta) {
+    if (!this.escapeGhost || !this.escapeSequenceActive) return;
+
+    const px = this.playerSystem.sprite.x;
+    const ghostX = this.escapeGhost.x;
+    const dist = px - ghostX;
+
+    // Ghost moves toward player at 80px/s (player is 160px/s — tolerable, gives player time)
+    const ghostSpeed = 80;
+    const dir = dist > 0 ? 1 : -1;
+    this.escapeGhost.x += dir * ghostSpeed * (delta / 1000);
+    this.escapeGhost.flipX = dir < 0;
+
+    // Pulse alpha for eerie effect
+    this.escapeGhost.setAlpha(0.5 + Math.sin(Date.now() * 0.003) * 0.2);
+
+    // If ghost catches player (within 60px) → jumpscare
+    if (Math.abs(px - this.escapeGhost.x) < 60) {
+      if (this.lightSystem.isPlayerProtected()) return; // Light still repels
+      if (this.catSystem && this.catSystem.getState() === 'defending' && this.catSystem.isPlayerBehind(px)) return; // Cat protects
+
+      this.escapeGhost.destroy();
+      this.escapeGhost = null;
+      this.horrorEventSystem.jumpscare(3);
+    }
   }
 
   // === FEATURE #10: Save system ===
@@ -800,6 +951,10 @@ export default class GameScene extends Phaser.Scene {
       battery: this.lightSystem.battery,
       flashlightIsOn: this.lightSystem.isOn,
       sanity: this.playerSystem.sanity,
+      firedTriggers: [...this.horrorEventSystem.firedTriggers],
+      escapeSequenceActive: this.escapeSequenceActive,
+      roomLightStates: { ...this.roomLightStates },
+      completedMissions: [...this.missionSystem.completedMissions],
       timestamp: Date.now(),
     };
     try {
@@ -851,8 +1006,7 @@ export default class GameScene extends Phaser.Scene {
   transitionToRoom(roomId, playerStartX = null) {
     if (this.isTransitioning || !roomId) return;
 
-    // CAT HISSING GATE (kitchen): block leaving while the cat is hissing and the
-    // safety meter hasn't completed yet.
+    // CAT HISSING GATE (kitchen only): block leaving while cat is hissing
     if (this.currentRoomId === 'kitchen'
       && this.catSystem && this.catSystem.isWarning()
       && !this.catMeterCompleted) {
@@ -868,9 +1022,7 @@ export default class GameScene extends Phaser.Scene {
     this.playerSystem.lock();
     this.horrorEventSystem.stopAmbient();
 
-    this.cameras.main.fadeOut(500, 0, 0, 0);
-
-    this.cameras.main.once('camerafadeoutcomplete', () => {
+    const doTransition = () => {
       if (this.ambientMusic) {
         this.ambientMusic.stop();
       }
@@ -888,7 +1040,20 @@ export default class GameScene extends Phaser.Scene {
         flashlightIsOn: this.lightSystem.isOn,
         sanity: this.playerSystem.sanity,
         firedTriggers: [...this.horrorEventSystem.firedTriggers],
+        escapeSequenceActive: this.escapeSequenceActive,
+        roomLightStates: { ...this.roomLightStates },
+        completedMissions: [...this.missionSystem.completedMissions],
       });
+    };
+
+    this.cameras.main.fadeOut(500, 0, 0, 0);
+    this.cameras.main.once('camerafadeoutcomplete', doTransition);
+
+    // Safety: if fadeOut doesn't complete (e.g. camera already fading), force after 800ms
+    this.time.delayedCall(800, () => {
+      if (this.isTransitioning) {
+        doTransition();
+      }
     });
   }
 }

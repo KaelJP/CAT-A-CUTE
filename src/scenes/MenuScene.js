@@ -263,6 +263,10 @@ export default class MenuScene extends Phaser.Scene {
             battery: this.saveData.battery,
             flashlightIsOn: this.saveData.flashlightIsOn,
             sanity: this.saveData.sanity,
+            firedTriggers: this.saveData.firedTriggers || null,
+            escapeSequenceActive: this.saveData.escapeSequenceActive || false,
+            roomLightStates: this.saveData.roomLightStates || {},
+            completedMissions: this.saveData.completedMissions || [],
             loadedFromSave: true,
           });
         });

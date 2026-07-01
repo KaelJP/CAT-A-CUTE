@@ -42,6 +42,7 @@ export default class BootScene extends Phaser.Scene {
     loadImage('kitchen_key', 'assets/images/objects/kitchen_key.png');
     loadImage('old_photo', 'assets/images/objects/old_photo.png');
     loadImage('crumpled_note', 'assets/images/objects/crumpled_note.png');
+    loadImage('battery', 'assets/images/objects/battery.png');
 
     loadImage('room_living', 'assets/images/rooms/room_living.png');
     loadImage('room_hallway', 'assets/images/rooms/room_hallway.png');

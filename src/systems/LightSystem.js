@@ -1,4 +1,6 @@
 export default class LightSystem {
+  static BATTERY_RECHARGE_AMOUNT = 40;
+
   constructor() {
     this.scene = null;
     this.battery = 100;
@@ -131,6 +133,13 @@ export default class LightSystem {
   forceOff() {
     this.isOn = false;
     this.battery = 0;
+  }
+
+  recharge(amount) {
+    this.battery = Math.min(100, this.battery + amount);
+    if (this.battery > 0 && !this.isOn) {
+      this.isOn = true;
+    }
   }
 
   isActive() {

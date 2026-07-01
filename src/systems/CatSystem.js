@@ -7,6 +7,7 @@ export default class CatSystem {
     this.followSpeed = 130;
     this.floorY = 530;
     this.runTargetX = null;
+    this.leadTargetX = null;
     this.stateOverride = false;
   }
 
@@ -99,6 +100,15 @@ export default class CatSystem {
     this.setState('running');
   }
 
+  /**
+   * Cat leads the player toward a target position (escape sequence).
+   */
+  leadTo(x) {
+    this.leadTargetX = x;
+    this.state = 'leading';
+    this.stateOverride = true;
+  }
+
   setGhostX(x) {
     this.ghostX = x;
   }
@@ -153,10 +163,24 @@ export default class CatSystem {
       const runDist = runTarget - this.sprite.x;
       if (Math.abs(runDist) > 10) {
         this.sprite.x += (runDist > 0 ? 1 : -1) * 250 * (delta / 1000);
+      } else {
+        // Reached target — resume normal follow behavior
+        this.state = 'idle';
+        this.runTargetX = null;
       }
       // Mirror the player's facing direction
       if (playerSprite) {
         this.sprite.flipX = !playerSprite.flipX;
+      }
+    }
+
+    // LEADING MODE: Cat moves ahead of the player toward a target (used during escape)
+    if (this.state === 'leading') {
+      const leadTarget = this.leadTargetX ?? 600;
+      const leadDist = leadTarget - this.sprite.x;
+      if (Math.abs(leadDist) > 10) {
+        this.sprite.x += (leadDist > 0 ? 1 : -1) * 180 * (delta / 1000);
+        this.sprite.flipX = leadDist < 0;
       }
     }
 
